@@ -4,6 +4,8 @@
 //
 //  Created by jstefanop on 1/25/18.
 //
+//  extended for remote tuning script by psycodad 05/10/18
+//
 
 #include <stdint.h>
 #include <errno.h>
@@ -34,6 +36,8 @@ static unsigned char Pic_jump_from_loader_to_app[1] = {JUMP_FROM_LOADER_TO_APP};
 static unsigned char Pic_reset[1] = {RESET_PIC};
 pthread_mutex_t iic_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t i2c_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+int const i2c_slave_addr[4] = {0xa0,0xa2,0xa4,0xa6};
 
 
 
@@ -111,77 +115,127 @@ void pic_reset(int fd)
     usleep(600*1000);
 }
 
-
-void main (int argc, char *argv[]){
-    
-    if (argc != 3) {
-        printf("Incorrect arguments\n");
-        printf("Usage:\n");
-        printf("./set_voltage [chain# 1-4] [voltage in hex]\n");
-        exit(1);
-    }
-    
-    int chain = atoi(argv[1]);
-    unsigned char set_voltage = strtol(argv[2], NULL, 16);
-    
-    if(chain > 4 || chain == 0){
-        printf("Invalid chain #, valid range 1-4\n");
-        exit(1);
-    }
-    if(strtol(argv[2], NULL, 16) > 0xfe){
-        printf("Invalid hex voltage, valid range 0x00-0xfe\n");
-        exit(1);
-    }
-    
-    int fd;
+int init_i2c(int chain) {
     char filename[40];
     unsigned char version = 0;
-    unsigned char voltage = 0;
-    int const i2c_slave_addr[4] = {0xa0,0xa2,0xa4,0xa6};
-    
-    chain--;
-    
+    int fd;
     sprintf(filename,"/dev/i2c-0");
     
     if ((fd = open(filename,O_RDWR)) < 0) {
         printf("Failed to open the bus\n");
         exit(1);
     }
-    
+
     pthread_mutex_lock(&iic_mutex);
     if (ioctl(fd,I2C_SLAVE,i2c_slave_addr[chain] >> 1 )) {
         printf("Failed to acquire bus access and/or talk to slave.\n");
         exit(1);
     }
+    
    // pic_reset(fd);
    // pic_jump_from_loader_to_app(fd);
     pic_read_pic_software_version(&version, fd);
-    printf("\n version = 0x%02x\n", version);
+    //printf(" version = 0x%02x\n", version);
     
     if(version != 0x03){
         printf("Wrong PIC version\n");
         exit(1);
     }
-    
-    printf("reading voltage\n");
+    return fd;
+}
+
+
+void read_voltage(int chain) {
+    unsigned char voltage = 0;
+    int fd;
+    fd = init_i2c(chain);
+    pic_read_voltage(&voltage, fd);   
+    printf("chain %i: voltage = 0x%02x", chain+1, voltage);
+   // pic_reset(fd);
+    pthread_mutex_unlock(&iic_mutex);
+    close(fd);
+}
+
+void read_voltage_all() {
+    int chain;
+    for (chain = 0; chain < 4; chain++) {
+      //printf("\nchain %i: ", chain+1, "");
+      printf("\n");
+      read_voltage(chain);
+    }
+}
+
+void write_voltage(int chain, unsigned char set_voltage) {
+    unsigned char voltage = 0;
+    int fd;
+    fd = init_i2c(chain);
+    printf("Reading voltage");
     pic_read_voltage(&voltage, fd);
-    
-    printf("\n voltage = 0x%02x\n", voltage);
-    
-    printf("setting voltage\n");
+    printf("\nchain %i: voltage = 0x%02x\n", chain+1, voltage);
+    printf("Setting voltage on chain %i\n", chain+1);
     pic_set_voltage(&set_voltage, fd);
     
-    printf("reading voltage\n");
+    printf("Reading voltage");
     pic_read_voltage(&voltage, fd);
-    printf("\n voltage = 0x%02x\n", voltage);
-    
+    printf("\nchain %i: voltage = 0x%02x\n", chain+1, voltage);
    // pic_reset(fd);
     pthread_mutex_unlock(&iic_mutex);
     
-    if(voltage != set_voltage)
+    if(voltage != set_voltage) {
         printf("ERROR: Voltage was not successfully set\n");
+        exit(1);
+    }
     else
         printf("Success: Voltage updated!\n");
+    close(fd);
+}
+
+void print_help() {
+    printf("Usage:\n");
+    printf("./set_voltage [chain# 1-4] [voltage in hex]\n");
+    printf("If no voltage is given, voltage is read out from chain.\n");
+    printf("If no chain is given, all chains will be read out.\n");
+}
+
+void main (int argc, char *argv[]){
+    int chain;
+    if (argc == 1) {
+      printf("Reading all voltages");   
+      read_voltage_all();
+      printf("\n"); 
+    }
+    if (argc > 1) {
+      if (strcmp(argv[1], "help") == 0) {
+        print_help();
+        exit(1);
+      }
+      chain = atoi(argv[1]);
+      if(chain > 4 || chain == 0){
+          printf("Invalid chain #, valid range 1-4\n");
+          print_help();
+          exit(1);
+      }
+      chain--;
+      if (argc == 2) { 
+        printf("Reading voltage chain %i:\n", chain+1);
+        read_voltage(chain);
+        printf("\n"); 
+      }
+    }
+    if (argc == 3) {
+      if(strtol(argv[2], NULL, 16) > 0xfe){
+        printf("Invalid hex voltage, valid range 0x00-0xfe\n");
+        print_help();
+        exit(1);
+      }    
+      unsigned char set_voltage = strtol(argv[2], NULL, 16);
+      write_voltage(chain, set_voltage);
+    }
+    if (argc > 3) {
+      printf("Incorrect arguments\n");
+      print_help();
+      exit(1);
+    }            
     
 }
 
