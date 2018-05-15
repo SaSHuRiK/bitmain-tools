@@ -1,6 +1,6 @@
 # Antminer L3+[+] autotuner for DAC voltage: l3plus_autotune.py
 
-This python 2 script builds upon (jstefanops great work)[https://bitcointalk.org/index.php?topic=3546316] and makes the process of voltage-tuning your L3+ miners easy and straightforward.
+This python 2 script builds upon [jstefanops great work](https://bitcointalk.org/index.php?topic=3546316) and makes the process of voltage-tuning your L3+ miners easy and straightforward.
 
 The right voltage level for your hash boards depends on many external and internal factors like board quality, frequency, ambient temperature etc.
 Apparently it can become necessary to re-tune your miners once you changed frequency or i.e. ambient temperatures shifted by some degrees (i.e. winter/summer).
@@ -15,11 +15,11 @@ While this script bases off the work of jstefanop, it does not use his *set_volt
 Just clone this repo, change into the scripts directory and you should be ready to go.
 The script requires the paramiko Python module, on a Debian based distro just do:
 
-```sudo apt-get install python-paramiko```
+`sudo apt-get install python-paramiko`
 
 ## Usage
 
-*
+```
 Usage:
 ./l3plus_autotune.py -i <ip>|--minerip=<ip> [OPTIONS]
 
@@ -34,7 +34,7 @@ Tune miner on 10.10.10.33, use '1234' as admin password and skip tuning chain 2 
 ./l3plus_autotune.py -i 10.10.10.33 -p 1234 --skip 2,3
 Default usage :
 ./l3plus_autotune.py -i 10.10.10.33
-*
+```
 
 The script will take anywhere from 30min to several hours to complete, it may also decide that it is unable to tune your miner completely. 
 
