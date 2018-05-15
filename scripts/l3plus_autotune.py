@@ -29,7 +29,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # --------------------------------------------------------------------------
 # l3plus_autotune.py: automatically tune undervolting on BM L3+/L3++
-# $Id: l3plus_autotune.py,v 1.40 2018-05-15 16:09:56 obiwan Exp $
+# $Id: l3plus_autotune.py,v 1.41 2018-05-15 16:33:44 obiwan Exp $
 # --------------------------------------------------------------------------
 
 # encode/decode trick with perl courtesy of:
@@ -477,7 +477,7 @@ def shameless_begging():
   print "\nIf you found this script helpful in tuning your miners, please donate to one of the following addresses:"
   print "BTC: 14kfN1siTWYsLxteeDxXJBfk8ZP74u2Pbz"
   print "LTC: LQiVP7PjUHdaYWmC5JzuPbKKETSc5brisr"
-  print "This script uses an improved version of jstefanops set_voltage tool, donate him to while you feel generous enough:"
+  print "This script uses an improved version of jstefanops set_voltage tool, donate him too while you feel generous enough:"
   print "https://github.com/jstefanop/bitmain-tools"
 
 
