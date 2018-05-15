@@ -29,7 +29,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # --------------------------------------------------------------------------
 # l3plus_autotune.py: automatically tune undervolting on BM L3+/L3++
-# $Id: l3plus_autotune.py,v 1.42 2018-05-15 19:26:28 obiwan Exp $
+# $Id: l3plus_autotune.py,v 1.44 2018-05-15 20:29:19 obiwan Exp $
 # --------------------------------------------------------------------------
 
 # encode/decode trick with perl courtesy of:
@@ -90,7 +90,12 @@ def get_minerstats(ip, port=API_PORT):
     s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     s.connect((ip, port))
     s.send(json.dumps({"command":'stats'}))
-    json_resp = s.recv(32768)
+    json_resp = ""
+    while True:
+      data = s.recv(1024)
+      if not data:
+        break
+      json_resp += data
     s.close()
   except socket.error, e:    
     print "Failed to connect to host:\n%s" %e
@@ -236,7 +241,7 @@ def add_history(stats, voltage, ts):
   if len(stats['chainrate']) != 4 or len(voltage) != 4:
     print "Invalid boards read, aborted!"
     print len(stats), len(voltage)
-    return
+    sys.exit(1)
   stats['voltage'] = voltage
   stats['timestamp'] = ts
   if not chain_hist.has_key(stats['frequency']):
@@ -578,7 +583,8 @@ if __name__ == '__main__':
       chain_hist[current_stats['frequency']].pop(0)
     time_running = (int(time.time()) - chain_hist[current_stats['frequency']][0]['timestamp'])
     print "= Running since: %02i:%02i.%02i, now sleeping for %.1fs =" \
-      %(divmod(time_running,60*60)[0], divmod(time_running,60)[0], divmod(time_running,60)[1], REPEAT - (time.time()-now))
+      %(divmod(time_running,60*60)[0], divmod( divmod(time_running, 60*60)[1], 60 )[0], divmod( divmod(time_running, 60*60)[1], 60 )[1], REPEAT - (time.time()-now))
+      
     # if we are stable, exit
     if now - last_change > 900:
       report_stats()
