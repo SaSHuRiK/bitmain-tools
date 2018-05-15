@@ -29,7 +29,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # --------------------------------------------------------------------------
 # l3plus_autotune.py: automatically tune undervolting on BM L3+/L3++
-# $Id: l3plus_autotune.py,v 1.41 2018-05-15 16:33:44 obiwan Exp $
+# $Id: l3plus_autotune.py,v 1.42 2018-05-15 19:26:28 obiwan Exp $
 # --------------------------------------------------------------------------
 
 # encode/decode trick with perl courtesy of:
@@ -77,23 +77,34 @@ MAX_VOLTAGE = '0x3f'
 TUNE_REPEAT = 300
 # absolutr maximum cycles
 MAX_CYCLE = 1200
+# socket timeout
+socket.setdefaulttimeout(10)
+
 
 ###############
 # NET FUNCTIONS
 ###############
 def get_minerstats(ip, port=API_PORT):
   """Get all stats from miner API"""
-  s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-  s.connect((ip, port))
-  s.send(json.dumps({"command":'stats'}))
-
-  json_resp = s.recv(32768)
-  s.close()
-  json_resp = json_resp.replace('\x00','')
-  json_resp = json_resp.replace("L3+\"}", "L3+\"},")
-
-  resp = json.loads(json_resp)
-
+  try:
+    s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    s.connect((ip, port))
+    s.send(json.dumps({"command":'stats'}))
+    json_resp = s.recv(32768)
+    s.close()
+  except socket.error, e:    
+    print "Failed to connect to host:\n%s" %e
+    sys.exit(1)
+  try:
+    json_resp = json_resp.replace('\x00','')
+    json_resp = json_resp.replace("L3+\"}", "L3+\"},")
+    resp = json.loads(json_resp)
+  except ValueError, e:
+    print "Failed to decode json reply:\n%s\n" %e
+    print json_resp
+    sys.exit(1)
+    ""
+  
   miner_stats = {}
   miner_stats['err'] = []
   miner_stats['speed'] = []
@@ -118,13 +129,20 @@ def get_minerstats(ip, port=API_PORT):
 def get_voltage(ip, chain=False):
   """Get voltage remotely, returns a list with errors of each of the 4 chains"""
   cur_voltage = []
-  client = paramiko.SSHClient()
-  client.set_missing_host_key_policy( paramiko.AutoAddPolicy() )
-  client.load_system_host_keys()
-  client.connect(ip, port=22, username='root', password=admin_pw)
-  stdin, stdout, stderr = client.exec_command(SETV_BIN)
-  res = stdout.read()
-  err = stderr.read()
+  try:
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy( paramiko.AutoAddPolicy() )
+    client.load_system_host_keys()
+    client.connect(ip, port=22, username='root', password=admin_pw)
+    stdin, stdout, stderr = client.exec_command(SETV_BIN)
+    res = stdout.read()
+    err = stderr.read()
+  except socket.error, e:
+    print "Failed to connect to %s via ssh:\n%s" %(ip, e)
+    sys.exit(1)
+  except paramiko.AuthenticationException, e:
+    print "Authentication to %s failed:\n%s" %(ip, e)
+    sys.exit(1)
   # a shell error ocurred on the miner:
   if len(err) > 0:
     if err.endswith(": not found\n"):
