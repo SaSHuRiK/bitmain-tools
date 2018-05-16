@@ -29,7 +29,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # --------------------------------------------------------------------------
 # l3plus_autotune.py: automatically tune undervolting on BM L3+/L3++
-# $Id: l3plus_autotune.py,v 1.44 2018-05-15 20:29:19 obiwan Exp $
+# $Id: l3plus_autotune.py,v 1.47 2018-05-16 10:59:00 obiwan Exp $
 # --------------------------------------------------------------------------
 
 # encode/decode trick with perl courtesy of:
@@ -101,8 +101,13 @@ def get_minerstats(ip, port=API_PORT):
     print "Failed to connect to host:\n%s" %e
     sys.exit(1)
   try:
-    json_resp = json_resp.replace('\x00','')
-    json_resp = json_resp.replace("L3+\"}", "L3+\"},")
+    if json_resp.find('Blissz v1.02"}') > -1:
+      json_resp = json_resp.replace('Blissz v1.02"}', 'Blissz v1.02"},')
+      print "Blissz fw detected, fixing json output accordingly"
+    else:
+      json_resp = json_resp.replace('\x00','')
+      json_resp = json_resp.replace("L3+\"}", "L3+\"},")
+      print "Bitmain fw detected, fixing json output accordingly"
     resp = json.loads(json_resp)
   except ValueError, e:
     print "Failed to decode json reply:\n%s\n" %e
@@ -377,11 +382,11 @@ def dec_voltage(freq, chain):
   voltage_step =  min( int(0.5 / ( chain_hist[freq][-1]['error_rate15'][chain] + 0.01 ) ), 7)
   new_voltage = int(current_voltage[chain], 16) + voltage_step
   new_voltage = min(new_voltage, 254)
-  while not voltage_history(freq, chain, hex(new_voltage)):
+  while not voltage_history(freq, chain, hex(new_voltage)) and int(new_voltage,16) > int(current_voltage[chain], 16):
     new_voltage = new_voltage - 1
   #print "Voltage history for this voltage/freq/chain:", voltage_history(freq, chain, hex(new_voltage))
   #print "Current/new voltage on chain %i: %s / %s" %(chain+1, chain_hist[freq][-1]['voltage'][chain], hex(new_voltage))
-  if int(current_voltage[chain], 16) < 254:
+  if int(current_voltage[chain], 16) < 254 and current_voltage != new_voltage:
     voltage_result = set_voltage(miner_ip, chain+1, hex(new_voltage))
     last_change = int(time.time())
   else:
@@ -398,11 +403,11 @@ def inc_voltage(freq, chain):
   voltage_step = max( int( chain_hist[freq][-1]['error_rate5'][chain] * (TUNE_REPEAT / 60) ) ,2 )
   new_voltage = int( current_voltage[chain], 16 ) - voltage_step
   new_voltage = max( new_voltage, int(MAX_VOLTAGE,16) )
-  while not voltage_history(freq, chain, hex(new_voltage)):
+  while not voltage_history(freq, chain, hex(new_voltage)) and int(new_voltage,16) < int(current_voltage[chain], 16):
     new_voltage = new_voltage + 1
   #print "Voltage history for this voltage/freq/chain:", voltage_history(freq, chain, hex(new_voltage))  
   #print "Current/new voltage on chain %i: %s / %s" %(chain+1, chain_hist[freq][-1]['voltage'][chain], hex(new_voltage))
-  if int(current_voltage[chain],16) == int(MAX_VOLTAGE,16):
+  if int(current_voltage[chain],16) == int(MAX_VOLTAGE,16) and current_voltage != new_voltage:
     print "Aborted further increase of voltage, chain %i is already at %s" %(chain+1, chain_hist[freq][-1]['voltage'][chain])
     #new_voltage = int(chain_hist[freq][-1]['voltage'][chain], 16)
     voltage_result = [chain_hist[freq][-1]['voltage'][chain], chain_hist[freq][-1]['voltage'][chain]]
@@ -597,7 +602,11 @@ if __name__ == '__main__':
     else:
       cycle_count += 1
     # sleep a while..
-    time.sleep( REPEAT - (time.time()-now) )
+    sleep_time = REPEAT - (time.time()-now) 
+    if sleep_time < 0:
+      time.sleep(5)
+    else:
+      time.sleep(sleep_time)
       
 
 
