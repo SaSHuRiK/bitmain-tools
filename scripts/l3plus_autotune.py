@@ -29,7 +29,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # --------------------------------------------------------------------------
 # l3plus_autotune.py: automatically tune undervolting on BM L3+/L3++
-# $Id: l3plus_autotune.py,v 1.47 2018-05-16 10:59:00 obiwan Exp $
+# $Id: l3plus_autotune.py,v 1.56 2018-06-01 13:22:48 obiwan Exp $
 # --------------------------------------------------------------------------
 
 # encode/decode trick with perl courtesy of:
@@ -61,7 +61,6 @@ API_PORT = 4028
 # setvoltage binary
 SETV_BIN = '/config/sv'
 SETV_BIN_MD5 = '113ad2c06daac293386e28807ea35671'
-REMOTE_DELAY = 3.5
 REPEAT = 60
 # array length based on above REPEAT rate
 LEN5MIN = 5*60 / REPEAT
@@ -71,7 +70,7 @@ LEN15MIN = 15*60 / REPEAT
 HIST_MAX_LEN = 2880
 # max acceptable errors/min
 MAX_ERR_RATE = 0.2 # 0.25 / 15 errors per hour, 0.2 / 12/h, 0.1 / 6/h
-MAX_VOLTAGE = '0x3f'
+MAX_VOLTAGE = '0x50'
 #TUNE_REPEAT = 300 # retry tuning voltage every TUNE_REPEAT seconds
 #for testing
 TUNE_REPEAT = 300
@@ -87,27 +86,27 @@ socket.setdefaulttimeout(10)
 def get_minerstats(ip, port=API_PORT):
   """Get all stats from miner API"""
   try:
+    json_resp = ""
     s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     s.connect((ip, port))
     s.send(json.dumps({"command":'stats'}))
-    json_resp = ""
     while True:
       data = s.recv(1024)
       if not data:
         break
       json_resp += data
     s.close()
-  except socket.error, e:    
+  except socket.error, e:
     print "Failed to connect to host:\n%s" %e
     sys.exit(1)
   try:
     if json_resp.find('Blissz v1.02"}') > -1:
       json_resp = json_resp.replace('Blissz v1.02"}', 'Blissz v1.02"},')
-      print "Blissz fw detected, fixing json output accordingly"
+      #print "Blissz fw detected, fixing json output accordingly"
     else:
       json_resp = json_resp.replace('\x00','')
       json_resp = json_resp.replace("L3+\"}", "L3+\"},")
-      print "Bitmain fw detected, fixing json output accordingly"
+      #print "Bitmain fw detected, fixing json output accordingly"
     resp = json.loads(json_resp)
   except ValueError, e:
     print "Failed to decode json reply:\n%s\n" %e
@@ -188,9 +187,7 @@ def set_voltage(ip, chain, voltage):
   res = stdout.read()
   for line in res.split('\n'):
     if line.strip().find("voltage =", 0) > -1:
-      #print "Line:", line, "Parsed:", line.split('=')[1].strip()
       this_voltage.append(line.split('=')[1].strip())
-    # check if set_voltage is installed
   client.close()  
   return this_voltage
   
@@ -378,11 +375,12 @@ def adjust_voltage(freq):
 
 def dec_voltage(freq, chain):
   """decrease voltage on chain"""
-  global current_voltage
-  voltage_step =  min( int(0.5 / ( chain_hist[freq][-1]['error_rate15'][chain] + 0.01 ) ), 7)
+  global current_voltage, last_change
+  voltage_step =  min( int(0.35 / ( chain_hist[freq][-1]['error_rate15'][chain] + 0.01 ) ), 7)
   new_voltage = int(current_voltage[chain], 16) + voltage_step
   new_voltage = min(new_voltage, 254)
-  while not voltage_history(freq, chain, hex(new_voltage)) and int(new_voltage,16) > int(current_voltage[chain], 16):
+  while not voltage_history(freq, chain, hex(new_voltage)) and new_voltage > int(current_voltage[chain], 16):
+    print "DEBUG:", voltage_history(freq, chain, hex(new_voltage)), new_voltage, int(current_voltage[chain], 16)
     new_voltage = new_voltage - 1
   #print "Voltage history for this voltage/freq/chain:", voltage_history(freq, chain, hex(new_voltage))
   #print "Current/new voltage on chain %i: %s / %s" %(chain+1, chain_hist[freq][-1]['voltage'][chain], hex(new_voltage))
@@ -400,10 +398,13 @@ def dec_voltage(freq, chain):
 def inc_voltage(freq, chain):
   """increase voltage on chain"""
   global current_voltage, last_change
-  voltage_step = max( int( chain_hist[freq][-1]['error_rate5'][chain] * (TUNE_REPEAT / 60) ) ,2 )
+  voltage_step = max( int( chain_hist[freq][-1]['error_rate5'][chain] * (TUNE_REPEAT / 60) ), 2 )
+  # limit to voltage_step 7
+  voltage_step = min(voltage_step, 7)
   new_voltage = int( current_voltage[chain], 16 ) - voltage_step
   new_voltage = max( new_voltage, int(MAX_VOLTAGE,16) )
-  while not voltage_history(freq, chain, hex(new_voltage)) and int(new_voltage,16) < int(current_voltage[chain], 16):
+  while not voltage_history(freq, chain, hex(new_voltage)) and new_voltage < int(current_voltage[chain], 16):
+    print "DEBUG:", voltage_history(freq, chain, hex(new_voltage)), new_voltage, int(current_voltage[chain], 16)
     new_voltage = new_voltage + 1
   #print "Voltage history for this voltage/freq/chain:", voltage_history(freq, chain, hex(new_voltage))  
   #print "Current/new voltage on chain %i: %s / %s" %(chain+1, chain_hist[freq][-1]['voltage'][chain], hex(new_voltage))
@@ -492,6 +493,7 @@ def show_usage():
   print " --password=<adminpass>"
   print " -s <chain1[,chain2]>\t\tskip one or more chains"
   print " --skip <chain1[,chain2]>" 
+  print " --nobegging\t\t\tSuppress the begging message"
   print ""
   print "Examples:"
   print "Tune miner on 10.10.10.33, use '1234' as admin password and skip tuning chain 2 and 3:"
@@ -580,7 +582,7 @@ if __name__ == '__main__':
     # check miner status for errors
     check_minerstatus(current_stats['frequency'])
     # see if we have to adjust voltage every 5min only
-    if int(now) - last_vset.keys()[-1] > TUNE_REPEAT:
+    if int(now) - last_vset.keys()[-1] > TUNE_REPEAT -5:
       adjust_voltage(current_stats['frequency'])    
       last_vset = {int(time.time()): current_voltage}
     # limit length of history
