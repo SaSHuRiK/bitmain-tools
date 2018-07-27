@@ -29,7 +29,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # --------------------------------------------------------------------------
 # l3plus_autotune.py: automatically tune undervolting on BM L3+/L3++
-# $Id: l3plus_autotune.py,v 1.59 2018-06-23 15:09:32 obiwan Exp $
+# $Id: l3plus_autotune.py,v 1.60 2018-07-27 14:00:32 obiwan Exp $
 # --------------------------------------------------------------------------
 
 # encode/decode trick with perl courtesy of:
@@ -100,6 +100,7 @@ def get_minerstats(ip, port=API_PORT):
     print "Failed to connect to host:\n%s" %e
     sys.exit(1)
   if json_resp.find('Blissz v1.02"}') > -1:
+    json_resp = json_resp.replace('\x00','')
     json_resp = json_resp.replace('Blissz v1.02"}', 'Blissz v1.02"},').strip()
     #print "Blissz fw detected, fixing json output accordingly"
   elif json_resp.find('Antminer L3++') > -1:
