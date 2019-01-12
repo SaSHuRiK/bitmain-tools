@@ -1,3 +1,5 @@
+# bitmain L3 voltage tool
+
 This version of jstefanop's set_voltage also allows to read out voltages only and gives better parseable output.
 
 This tool allows voltage editing on Bitmain’s L3+ hashboards, it is provided free by the developer so if you find this useful and/or want me to update/provide new tools please donate to the below address. Thanks!
